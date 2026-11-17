@@ -1,0 +1,48 @@
+name: Build BoonPanel Diagnostic
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-x64:
+    name: Windows x64 DLL
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: cmake -S . -B build -A x64
+
+      - name: Compile Release DLL
+        run: cmake --build build --config Release --parallel
+
+      - name: Create install ZIP
+        shell: pwsh
+        run: |
+          if (!(Test-Path "build/package/addons/BoonPanel.dll")) { throw "Nexus DLL was not produced" }
+          if (!(Test-Path "build/package/bin64/arcdps_BoonPanel.dll")) { throw "ArcDPS DLL copy was not produced" }
+          Compress-Archive -Path "build/package/*" -DestinationPath "BoonPanel-Diagnostic-Windows-x64.zip" -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BoonPanel-Diagnostic-Windows-x64
+          path: BoonPanel-Diagnostic-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release for version tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: BoonPanel Diagnostic ${{ github.ref_name }}
+          generate_release_notes: true
+          files: BoonPanel-Diagnostic-Windows-x64.zip
