@@ -2,8 +2,8 @@
 
 A movable Guild Wars 2 boon panel for the local player. It is built as one C++ DLL with two load interfaces:
 
-- **Nexus** draws the movable ImGui panel.
-- **ArcDPS** supplies live local-player boon events through its `combat_local` extension callback.
+- **Nexus** draws the movable ImGui panel and loads the boon artwork as textures.
+- **ArcDPS** supplies live local-player boon events through its combat extension callbacks.
 
 The DLL is built once, then copied under two names so both loaders can load their own module instance:
 
@@ -15,28 +15,30 @@ Guild Wars 2/
     └── arcdps_BoonPanel.dll
 ```
 
-## What it currently does
+## Features
 
-- Displays the 12 standard boons: Aegis, Alacrity, Fury, Might, Protection, Quickness, Regeneration, Resistance, Resolution, Stability, Swiftness and Vigor. The boon IDs are declared in `src/boons.h`.
-- Uses a draggable Nexus/ImGui window; the position is managed by ImGui.
-- Shows countdowns on all active boon tiles, with stack counts on Might and Stability; intensity-stacking boons show the next stack expiry.
-- Has panel settings for tile size, columns, inactive boons, durations and stack counts.
-- Tracks boons on the local character whether applied by you or by an ally. Expiration timestamps are shared between the two DLL instances so countdowns tick down without waiting for another callback.
-- Supports both ArcDPS buff-event formats: classic `CBTS_COMBAT` buff events (`buff == 1`) and newer dedicated buff statechanges (`CBTS_BUFFAPPLY`/`BUFFCHANGE`/`BUFFREMOVE`).
+- Displays the 12 standard boons using their original Guild Wars 2 boon artwork: Aegis, Alacrity, Fury, Might, Protection, Quickness, Regeneration, Resistance, Resolution, Stability, Swiftness and Vigor.
+- Uses Nexus' texture service to download and cache the small PNG icons from the Guild Wars 2 Wiki's file redirects. The first load requires an internet connection; icons are cached by Nexus for the game session. If an icon cannot be loaded, its short text label is shown as a fallback.
+- Shows a smooth shield-shaped five-sided countdown outline fitted to each active boon icon, plus a compact numeric timer below it. The pentagon outline resets when a boon is refreshed; Might and Stability retain their stack badges and show the next stack expiry.
+- Uses a transparent, draggable Nexus/ImGui window. The default layout is a compact horizontal row; all controls are available from **Nexus → Addons → BoonPanel → Configure** (icon size, icon spacing, optional category sorting, horizontal/grid layout, inactive icons, durations, stack counts and overlay visibility). Category sorting groups offensive boons first, defensive boons second, and support/utility boons last.
+- Tracks boons on the local character whether applied by you or by an ally. Expiration timestamps are shared between the Nexus and ArcDPS module instances so countdowns tick smoothly.
+- Compensates for ArcDPS delayed area events using event timestamps; it does not add an artificial display delay.
+- Supports classic ArcDPS buff events (`buff == 1`) and newer dedicated buff statechanges (`CBTS_BUFFAPPLY`/`BUFFCHANGE`/`BUFFREMOVE`).
 - Works in WvW to the extent ArcDPS exposes the local player's boon events in that situation.
 
-This is a starter implementation, not a pixel-perfect Reffect replacement. It uses compact text tiles rather than Reffect's original artwork and does not implement every Reffect layout/customization feature.
+## Artwork and attribution
+
+The boon PNGs are the Guild Wars 2 boon icons mirrored by the [Guild Wars 2 Wiki](https://wiki.guildwars2.com/wiki/Category:Boon_icons). The game artwork and Guild Wars 2 marks belong to ArenaNet/NCSOFT. BoonPanel is an independent community addon and is not affiliated with ArenaNet. The icon files are loaded from the wiki's `Special:Redirect/file/` endpoint through Nexus' asynchronous texture API; they are not bundled into the DLL.
 
 ## Important WvW/data limitation
 
-Nexus' public shared game data does not include a complete active-boon snapshot. The data bridge therefore uses ArcDPS' `combat_local` callback. ArcDPS documents boon apply/change/remove events as visibility-limited; initial boon state outside an instance is limited to squad information. As a result:
+Nexus' public shared game data does not include a complete active-boon snapshot. The data bridge therefore uses ArcDPS realtime combat callbacks. ArcDPS documents boon apply/change/remove events as visibility-limited; initial boon state outside an instance is limited to squad information. As a result:
 
-- Start tracking reliably by applying/reapplying boons after ArcDPS and BoonPanel have loaded.
-- A boon already active before tracking starts may not appear until it is applied again; ArcDPS initial/active-stack events are not a complete player-wide snapshot in every mode.
-- Boons that the combat event feed does not expose cannot be inferred by this addon.
-- The panel is for **your character's** boons, including boons supplied by allies; it does not display every ally/enemy's boon bar.
+- A boon already active before tracking starts may not appear until it is applied or refreshed again.
+- Boon events that ArcDPS does not expose cannot be inferred by this addon.
+- The panel shows **your character's** boons, including boons supplied by allies; it does not display every ally/enemy's boon bar.
 
-No memory scanning, injection, or hidden-state reading is implemented. The addon does not bypass ArenaNet/ArcDPS visibility limits. Review the Guild Wars 2 third-party program policy and the current ArcDPS/Nexus addon policies before use.
+No memory scanning, injection, or hidden-state reading is implemented. The addon does not bypass ArenaNet/ArcDPS visibility limits. Review the Guild Wars 2 third-party program policy and current ArcDPS/Nexus addon policies before use.
 
 ## Build on GitHub
 
@@ -48,7 +50,9 @@ No memory scanning, injection, or hidden-state reading is implemented. The addon
 6. Extract the ZIP into your Guild Wars 2 installation directory, keeping the `addons` and `bin64` folders intact.
 7. Restart the game. Ensure both Nexus and ArcDPS are installed and enabled.
 
-The workflow uses `windows-2022`, CMake, the official `RaidcoreGG/Nexus-API` header repository and Dear ImGui v1.80. Nexus requires the exact ImGui 1.80 structure layout; do not change this dependency to a newer ImGui version unless Nexus updates its ABI requirements.
+To publish a GitHub Release automatically, push a version tag such as `v0.2.1`. The workflow builds the ZIP and attaches it to the release.
+
+The workflow uses `windows-2022`, CMake, the official `RaidcoreGG/Nexus-API` header repository and Dear ImGui v1.80. Nexus requires the exact ImGui 1.80 structure layout; do not change this dependency unless Nexus updates its ABI requirements.
 
 ## Build locally (Windows x64)
 
@@ -64,11 +68,10 @@ The install layout is produced at `build/package/`.
 ## Troubleshooting
 
 - **Nexus does not list the addon:** confirm `addons/BoonPanel.dll` exists, is 64-bit, and was built against the current Nexus SDK header/API version.
-- **Compiler error `EAddonFlags::None` / `C2838`:** the current Nexus header calls the zero flag `AF_None`; the project source uses `EAddonFlags::AF_None`. Make sure you are building the latest project revision.
 - **ArcDPS does not list the extension:** confirm the file is named exactly `arcdps_BoonPanel.dll` and is in `bin64` (or the GW2 root directory). Confirm ArcDPS itself is installed.
-- **Publishing a release:** push a version tag such as `v0.1.1`; the workflow builds the ZIP and attaches it to a GitHub Release automatically. A normal branch push only creates the Actions artifact.
-- **Panel says it is waiting for events:** apply a boon to your character after both modules load. If it still does not update, check the ArcDPS log and ensure the current ArcDPS build supports the extension API revision.
-- **Some boon timers/stacks are missing:** the feed is not a guaranteed full-state API; refer to the limitation above.
+- **Icons show text abbreviations instead of artwork:** allow Nexus to access the Guild Wars 2 Wiki over HTTPS; the image texture service loads the icon files asynchronously. The abbreviation is a fallback if an image request fails.
+- **Panel does not show a boon:** apply/reapply the boon after both modules load. ArcDPS cannot provide events filtered by its visibility rules.
+- **Some boon timers/stacks are missing:** the realtime feed is not a guaranteed full-state API; refer to the WvW/data limitation above.
 
 ## Project layout
 
@@ -77,29 +80,31 @@ src/
   arcdps_api.h       ArcDPS ABI declarations used by this project
   arc_extension.cpp ArcDPS callback, boon tracking and DLL exports
   boons.h            Boon names, IDs and stacking metadata
-  nexus_addon.cpp    Nexus export and ImGui panel
+  nexus_addon.cpp    Nexus export, texture loading and icon-based ImGui panel
   shared_state.h/.cpp Named process-local shared-memory snapshot
 .github/workflows/
-  build.yml          GitHub Actions Windows x64 build
+  build.yml          GitHub Actions Windows x64 build and release workflow
 CMakeLists.txt       Dependency fetch and DLL/package build
 ```
 
 ## License
 
-This project is provided under the MIT License. It is an independent implementation and does not include Reffect source or assets.
+The addon source is provided under the MIT License. Guild Wars 2 artwork is not covered by that license and remains the property of its respective rights holders.
 
 
-### Self-application mode
+### Pentagon duration outline
 
-The live tracker intentionally records a boon only when ArcDPS identifies the local character as both the source and destination (`src->self`, `dst->self`, and matching agent IDs). For example, a Stability application with skill ID `1122` is added using its `value` duration in milliseconds, then displayed as a countdown. Applications cast by another player onto you, or applications you cast onto another player, are ignored.
+Active boon duration is shown as a smooth, boon-colored progress outline following the boon artwork’s asymmetric shield-shaped perimeter (pointed top, sloped shoulders, tapered sides and flat base). The subdued full pentagon remains visible as the track; the colored portion shrinks as the boon expires and resets when the boon is applied or refreshed.
 
-The tracker consumes ArcDPS realtime `combat_local` events, not a text dump of the `.zevtc` file. This is necessary for an on-screen live countdown; the on-disk EVTC/ZE​​VTC log is a binary combat log and is generally finalized after the encounter. Realtime buff events can be filtered by ArcDPS visibility rules, so a missing event in WvW cannot be recovered by this callback.
+### Boon selection
+
+Open Nexus Addons → BoonPanel → Configure and use the **Boon selection** checkboxes to choose which boons appear in the overlay. **Select all** and **Select none** provide quick presets. All boons are enabled by default to preserve the original display. Filtering affects only the displayed tiles; ArcDPS tracking continues for every supported boon.
+
+### In-game window style menu
+
+Right-click anywhere on the BoonPanel window (including over a boon icon) to open the context menu. Choose **Style → Hide title bar** to remove the title bar while keeping the panel movable/resizable behavior provided by ImGui. The title bar is shown by default.
 
 
-## Diagnostic build (0.2.0-diagnostic)
+### Horizontal and vertical boon arrangement
 
-This build registers both ArcDPS `combat_local` and `combat` callbacks and deduplicates the same Arc event by event id. The Nexus panel displays callback counts, null-agent notifications, local agent ID, recognized boon-event count, local-target matches, last skill ID/duration, statechange flags, and last source/target names.
-
-Test procedure: enter a map, wait for the panel to show `Bridge: OPEN`, apply a boon to yourself, then inspect the counters. If callback counters remain zero, check ArcDPS extension loading. If callbacks rise but boon events remain zero, inspect the last event fields and ArcDPS version. If boon events rise but target matches remain zero, capture the diagnostic panel and share it for further analysis.
-
-Note: the live ArcDPS API is filtered and cannot provide a complete history of every boon in every WvW situation. This diagnostic build tests the actual callback path; it does not parse a continuously written `.zevtc` file.
+Open Nexus Addons → BoonPanel → Configure. Under **Layout → Boon arrangement**, choose **Horizontal** to place enabled boon icons in a row, or **Vertical** to stack them in a single column. Icon spacing and icon size apply to both arrangements.
