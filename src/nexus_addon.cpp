@@ -38,6 +38,8 @@ float g_fallback_font_size = 14.0f;
 ImVec4 g_timer_font_color = ImVec4(0.92f, 0.94f, 0.98f, 0.92f);
 ImVec4 g_stack_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 ImVec4 g_fallback_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+// One shared tint for every boon duration perimeter, independent of boon type.
+ImVec4 g_duration_outline_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 std::array<std::uint32_t, boonpanel::kBoonCount> g_ring_total_ms{};
 std::array<std::uint32_t, boonpanel::kBoonCount> g_last_remaining_ms{};
 
@@ -52,13 +54,46 @@ int BoonCategory(std::size_t index) {
 }
 
 // These are the original Guild Wars 2 boon icons mirrored by the GW2 Wiki.
-// Nexus downloads them asynchronously and keeps the resulting textures cached
-// for the lifetime of the game. The special-file endpoint redirects to the PNG.
+// Start all requests as soon as the addon loads instead of waiting until each
+// boon becomes visible. Nexus caches textures by identifier for the game session.
 constexpr const char* kBoonIconFiles[boonpanel::kBoonCount] = {
     "Aegis.png", "Alacrity.png", "Fury.png", "Might.png",
     "Protection.png", "Quickness.png", "Regeneration.png", "Resistance.png",
     "Resolution.png", "Stability.png", "Swiftness.png", "Vigor.png"
 };
+std::array<Texture_t*, boonpanel::kBoonCount> g_boon_textures{};
+
+void RequestBoonTexture(std::size_t index) {
+    if (!g_api || !g_api->Textures_GetOrCreateFromURL || index >= boonpanel::kBoonCount ||
+        g_boon_textures[index] != nullptr) {
+        return;
+    }
+
+    char identifier[64]{};
+    std::snprintf(identifier, sizeof(identifier), "TEX_BOONPANEL_%s", boonpanel::kBoons[index].short_name);
+    char endpoint[160]{};
+    std::snprintf(endpoint, sizeof(endpoint), "/wiki/Special:Redirect/file/%s", kBoonIconFiles[index]);
+    g_boon_textures[index] = g_api->Textures_GetOrCreateFromURL(
+        identifier, "https://wiki.guildwars2.com", endpoint);
+}
+
+void PreloadBoonTextures() {
+    // Kick off every icon download at addon startup, including icons currently
+    // disabled in the user's boon selection. The calls are non-blocking.
+    for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
+        RequestBoonTexture(i);
+    }
+}
+
+void RefreshPendingBoonTextures() {
+    // GetOrCreate also returns an already-cached texture. Poll only entries
+    // that have not completed yet, so there is no repeated work after loading.
+    for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
+        if (g_boon_textures[i] == nullptr) {
+            RequestBoonTexture(i);
+        }
+    }
+}
 
 void DrawBoonTile(std::size_t index, std::uint32_t stacks,
                   std::uint32_t remaining_ms, bool active) {
@@ -75,36 +110,27 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ImVec2 image_min(pos.x, pos.y);
     const ImVec2 image_max(pos.x + tile, pos.y + tile);
-    // GetOrCreate is deliberately called each frame until the asynchronous
-    // download finishes; after that Nexus returns the cached texture.
-    if (g_api && g_api->Textures_GetOrCreateFromURL) {
-        char identifier[64]{};
-        std::snprintf(identifier, sizeof(identifier), "TEX_BOONPANEL_%s", boon.short_name);
-        char endpoint[160]{};
-        std::snprintf(endpoint, sizeof(endpoint), "/wiki/Special:Redirect/file/%s", kBoonIconFiles[index]);
-        if (auto* texture = g_api->Textures_GetOrCreateFromURL(
-                identifier, "https://wiki.guildwars2.com", endpoint)) {
-            const ImU32 tint = active ? IM_COL32(255, 255, 255, 255)
-                                      : IM_COL32(115, 120, 128, 155);
-            draw->AddImage(reinterpret_cast<ImTextureID>(texture->Resource),
-                           image_min, image_max, ImVec2(0, 0), ImVec2(1, 1), tint);
-        } else {
-            // Keep a legible fallback while the icon is downloading or if the
-            // remote image is unavailable.
-            const ImVec2 label_size = ImGui::GetFont()->CalcTextSizeA(g_fallback_font_size, 1000000.0f, 0.0f,
-                                                                boon.short_name);
-            ImVec4 label_color = g_fallback_font_color;
-            if (!active) {
-                label_color.x *= 0.62f;
-                label_color.y *= 0.62f;
-                label_color.z *= 0.62f;
-                label_color.w *= 0.75f;
-            }
-            draw->AddText(nullptr, g_fallback_font_size,
-                          ImVec2(pos.x + (tile - label_size.x) * 0.5f,
-                                 pos.y + (tile - label_size.y) * 0.5f),
-                          ImGui::ColorConvertFloat4ToU32(label_color), boon.short_name);
+    if (Texture_t* texture = g_boon_textures[index]) {
+        const ImU32 tint = active ? IM_COL32(255, 255, 255, 255)
+                                  : IM_COL32(115, 120, 128, 155);
+        draw->AddImage(reinterpret_cast<ImTextureID>(texture->Resource),
+                       image_min, image_max, ImVec2(0, 0), ImVec2(1, 1), tint);
+    } else {
+        // Keep a legible fallback while the preloaded icon is downloading or
+        // if the remote image is unavailable.
+        const ImVec2 label_size = ImGui::GetFont()->CalcTextSizeA(g_fallback_font_size, 1000000.0f, 0.0f,
+                                                            boon.short_name);
+        ImVec4 label_color = g_fallback_font_color;
+        if (!active) {
+            label_color.x *= 0.62f;
+            label_color.y *= 0.62f;
+            label_color.z *= 0.62f;
+            label_color.w *= 0.75f;
         }
+        draw->AddText(nullptr, g_fallback_font_size,
+                      ImVec2(pos.x + (tile - label_size.x) * 0.5f,
+                             pos.y + (tile - label_size.y) * 0.5f),
+                      ImGui::ColorConvertFloat4ToU32(label_color), boon.short_name);
     }
 
     // The duration outline follows a pentagon around the boon artwork. Its
@@ -126,10 +152,10 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
         // Coordinates are normalized to the icon tile and inset to its border.
         constexpr float shape[kPentagonSides][2] = {
             {0.50f, 0.035f}, // top point
-            {0.885f, 0.275f}, // upper-right shoulder / start of vertical wall
+            {0.885f, 0.255f}, // upper-right shoulder / start of vertical wall
             {0.885f, 0.925f}, // lower-right 90-degree corner
             {0.115f, 0.925f}, // lower-left 90-degree corner
-            {0.115f, 0.275f}  // upper-left shoulder / end of vertical wall
+            {0.115f, 0.255f}  // upper-left shoulder / end of vertical wall
         };
         std::array<ImVec2, kPentagonSides> vertices{};
         float perimeter = 0.0f;
@@ -158,7 +184,7 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
                 const float portion = (std::min)(1.0f, distance_left / edge_lengths[edge]);
                 const ImVec2 end(a.x + (b.x - a.x) * portion,
                                  a.y + (b.y - a.y) * portion);
-                draw->AddLine(a, end, static_cast<ImU32>(boon.display_color), 2.5f);
+                draw->AddLine(a, end, ImGui::ColorConvertFloat4ToU32(g_duration_outline_color), 2.5f);
                 distance_left -= edge_lengths[edge];
             }
         }
@@ -214,6 +240,8 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
 }
 
 void AddonRender() {
+    // Keep loading independent of visibility and boon-selection settings.
+    RefreshPendingBoonTextures();
     if (!g_visible) {
         return;
     }
@@ -353,6 +381,8 @@ void AddonOptions() {
     ImGui::Separator();
     ImGui::TextUnformatted("Text appearance");
     ImGui::TextUnformatted("Boon duration (seconds)");
+    ImGui::ColorEdit4("Duration outline color", &g_duration_outline_color.x);
+    ImGui::Spacing();
     ImGui::SliderFloat("Duration font size", &g_timer_font_size, 8.0f, 24.0f, "%.0f px");
     ImGui::ColorEdit4("Duration font color", &g_timer_font_color.x);
 
@@ -384,6 +414,7 @@ void AddonLoad(AddonAPI_t* api) {
         reinterpret_cast<void (*)(void*, void*)>(g_api->ImguiFree));
 
     g_shared.Open();
+    PreloadBoonTextures();
     g_api->GUI_Register(RT_Render, AddonRender);
     g_api->GUI_Register(RT_OptionsRender, AddonOptions);
 }
@@ -394,6 +425,7 @@ void AddonUnload() {
         g_api->GUI_Deregister(AddonOptions);
         g_api = nullptr;
     }
+    g_boon_textures.fill(nullptr);
     g_shared.Close();
 }
 

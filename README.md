@@ -19,12 +19,16 @@ Guild Wars 2/
 
 - Displays the 12 standard boons using their original Guild Wars 2 boon artwork: Aegis, Alacrity, Fury, Might, Protection, Quickness, Regeneration, Resistance, Resolution, Stability, Swiftness and Vigor.
 - Uses Nexus' texture service to download and cache the small PNG icons from the Guild Wars 2 Wiki's file redirects. The first load requires an internet connection; icons are cached by Nexus for the game session. If an icon cannot be loaded, its short text label is shown as a fallback.
-- Shows a smooth shield-shaped five-sided countdown outline fitted to each active boon icon, with straight vertical side walls and square lower corners, plus a compact numeric timer below it. The pentagon outline resets when a boon is refreshed; Might and Stability retain their stack badges and show the next stack expiry.
-- Uses a transparent, draggable Nexus/ImGui window. The default layout is a compact horizontal row; all controls are available from **Nexus → Addons → BoonPanel → Configure** (icon size, icon spacing, optional category sorting, horizontal/grid layout, inactive icons, durations, stack counts and overlay visibility). Category sorting groups offensive boons first, defensive boons second, and support/utility boons last.
+- Shows a smooth shield-shaped five-sided countdown outline fitted to each active boon icon, with straight vertical side walls and square lower corners, plus a compact numeric timer below it. The active perimeter segment uses one configurable shared color for every boon, independent of the boon icon color. The pentagon outline resets when a boon is refreshed; Might and Stability retain their stack badges and show the next stack expiry.
+- Uses a transparent, draggable Nexus/ImGui window. The default layout is a compact horizontal row; all controls are available from **Nexus → Addons → BoonPanel → Configure** (icon size, icon spacing, optional category sorting, horizontal/vertical layout, inactive icons, durations, stack counts, overlay visibility, text font sizes/colors and a shared duration-outline color). Category sorting groups offensive boons first, defensive boons second, and support/utility boons last.
 - Tracks boons on the local character whether applied by you or by an ally. Expiration timestamps are shared between the Nexus and ArcDPS module instances so countdowns tick smoothly.
 - Compensates for ArcDPS delayed area events using event timestamps; it does not add an artificial display delay.
 - Supports classic ArcDPS buff events (`buff == 1`) and newer dedicated buff statechanges (`CBTS_BUFFAPPLY`/`BUFFCHANGE`/`BUFFREMOVE`).
 - Works in WvW to the extent ArcDPS exposes the local player's boon events in that situation.
+
+## Appearance customization
+
+The Nexus Configure panel provides independent font size and color controls for boon duration text, stack counts and fallback boon names. It also provides a shared **Duration outline color** control; changing it applies the same perimeter progress color to every boon, rather than using each boon icon’s category color. The default outline color is white.
 
 ## Artwork and attribution
 
@@ -94,7 +98,7 @@ The addon source is provided under the MIT License. Guild Wars 2 artwork is not 
 
 ### Pentagon duration outline
 
-Active boon duration is shown as a smooth, boon-colored progress outline following the boon artwork’s asymmetric shield-shaped perimeter (pointed top, sloped shoulders, tapered sides and flat base). The subdued full pentagon remains visible as the track; the colored portion shrinks as the boon expires and resets when the boon is applied or refreshed.
+Active boon duration is shown as a smooth, boon-colored progress outline following the boon artwork’s asymmetric shield-shaped perimeter (pointed top, slightly wider crown angle, sloped shoulders, straight vertical side walls and flat base). The subdued full pentagon remains visible as the track; the colored portion shrinks as the boon expires and resets when the boon is applied or refreshed. The upper shoulders sit slightly lower to widen the top angle while preserving the straight side walls and square lower corners.
 
 ### Boon selection
 
@@ -128,3 +132,9 @@ These settings affect the overlay text without changing boon tracking, timer cal
 ### Hide during map loading
 
 BoonPanel automatically hides its overlay when ArcDPS reports a map change. It becomes visible again when ArcDPS reports that the local player agent has been created in the destination map. Boon tracking is cleared on map change as before; the feature does not alter boon duration calculations.
+
+### Faster boon icon startup
+
+BoonPanel now starts loading all 12 boon icons as soon as the Nexus addon initializes, rather than waiting for each boon tile to be drawn. The requests are asynchronous and use Nexus' texture cache. The render callback checks only textures that are still pending, so completed icons are reused without repeating URL construction or requests. Preloading also runs when the overlay is hidden and includes boons disabled in the display selection, so changing the selection later does not introduce a first-use download delay.
+
+The fallback boon abbreviation remains visible while an icon is downloading or if its request fails. This change improves request timing but still depends on the GW2 Wiki being reachable; the icon PNG files are not embedded in this package.
