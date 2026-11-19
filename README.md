@@ -30,6 +30,15 @@ Guild Wars 2/
 
 The Nexus Configure panel provides independent font size and color controls for boon duration text, stack counts and fallback boon names. It also provides a shared **Duration outline color** control; changing it applies the same perimeter progress color to every boon, rather than using each boon icon’s category color. The default outline color is white.
 
+## Persistent settings
+
+BoonPanel saves its display and appearance options to `BoonPanel.ini` beside
+the Nexus-loaded `addons/BoonPanel.dll`. Settings are restored automatically
+when the addon loads. The file is created after the first option change and
+can be backed up or copied when moving the addon to another installation.
+This includes boon selection, layout, visibility, sizing, font sizes/colors,
+duration outline color, and title-bar style.
+
 ## Artwork and attribution
 
 The boon PNGs are the Guild Wars 2 boon icons mirrored by the [Guild Wars 2 Wiki](https://wiki.guildwars2.com/wiki/Category:Boon_icons). The game artwork and Guild Wars 2 marks belong to ArenaNet/NCSOFT. BoonPanel is an independent community addon and is not affiliated with ArenaNet. The icon files are loaded from the wiki's `Special:Redirect/file/` endpoint through Nexus' asynchronous texture API; they are not bundled into the DLL.

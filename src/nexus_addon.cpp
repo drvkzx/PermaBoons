@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <string>
 
 #include <Nexus.h>
 #include "imgui.h"
@@ -42,6 +45,155 @@ ImVec4 g_fallback_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 ImVec4 g_duration_outline_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 std::array<std::uint32_t, boonpanel::kBoonCount> g_ring_total_ms{};
 std::array<std::uint32_t, boonpanel::kBoonCount> g_last_remaining_ms{};
+
+std::string g_settings_path;
+std::string g_last_saved_signature;
+
+std::string SettingsSignature() {
+    char buffer[2048]{};
+    int used = std::snprintf(
+        buffer, sizeof(buffer),
+        "%d|%d|%d|%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
+        g_visible, g_hide_title_bar, g_show_duration, g_show_inactive,
+        g_show_stack_counts, g_horizontal_layout, g_sort_by_category, g_tile_size, g_icon_spacing,
+        g_timer_font_size, g_stack_font_size, g_fallback_font_size,
+        g_timer_font_color.x, g_timer_font_color.y, g_timer_font_color.z,
+        g_timer_font_color.w, g_stack_font_color.x, g_stack_font_color.y,
+        g_stack_font_color.z);
+    std::string signature(buffer, used > 0 ? static_cast<std::size_t>(used) : 0);
+    char tail[512]{};
+    std::snprintf(tail, sizeof(tail),
+        "%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
+        g_stack_font_color.w, g_fallback_font_color.x, g_fallback_font_color.y,
+        g_fallback_font_color.z, g_fallback_font_color.w,
+        g_duration_outline_color.x, g_duration_outline_color.y);
+    signature += tail;
+    std::snprintf(tail, sizeof(tail), "%.3f|%.3f|",
+        g_duration_outline_color.z, g_duration_outline_color.w);
+    signature += tail;
+    for (bool enabled : g_boon_enabled) {
+        signature += enabled ? "1" : "0";
+    }
+    return signature;
+}
+
+void SetIniValue(const char* section, const char* key, const char* value) {
+    if (!g_settings_path.empty()) {
+        WritePrivateProfileStringA(section, key, value, g_settings_path.c_str());
+    }
+}
+
+void SaveSettingsIfChanged() {
+    if (g_settings_path.empty()) return;
+    const std::string signature = SettingsSignature();
+    if (signature == g_last_saved_signature) return;
+
+    char value[128]{};
+    auto write_bool = [&](const char* key, bool v) {
+        SetIniValue("General", key, v ? "1" : "0");
+    };
+    auto write_float = [&](const char* key, float v) {
+        std::snprintf(value, sizeof(value), "%.4f", v);
+        SetIniValue("Appearance", key, value);
+    };
+
+    write_bool("Visible", g_visible);
+    write_bool("HideTitleBar", g_hide_title_bar);
+    write_bool("ShowDuration", g_show_duration);
+    write_bool("ShowInactive", g_show_inactive);
+    write_bool("ShowStackCounts", g_show_stack_counts);
+    write_bool("HorizontalLayout", g_horizontal_layout);
+    write_bool("SortByCategory", g_sort_by_category);
+    for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
+        char key[32]{};
+        std::snprintf(key, sizeof(key), "Boon%zu", i);
+        write_bool(key, g_boon_enabled[i]);
+    }
+
+    write_float("TileSize", g_tile_size);
+    write_float("IconSpacing", g_icon_spacing);
+    write_float("TimerFontSize", g_timer_font_size);
+    write_float("StackFontSize", g_stack_font_size);
+    write_float("FallbackFontSize", g_fallback_font_size);
+
+    const ImVec4 colors[] = {g_timer_font_color, g_stack_font_color,
+        g_fallback_font_color, g_duration_outline_color};
+    const char* color_keys[] = {"TimerFontColor", "StackFontColor",
+        "FallbackFontColor", "DurationOutlineColor"};
+    for (std::size_t i = 0; i < 4; ++i) {
+        std::snprintf(value, sizeof(value), "%.4f,%.4f,%.4f,%.4f",
+            colors[i].x, colors[i].y, colors[i].z, colors[i].w);
+        SetIniValue("Appearance", color_keys[i], value);
+    }
+    g_last_saved_signature = signature;
+}
+
+void LoadSettings() {
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCSTR>(&LoadSettings), &module)) {
+        return;
+    }
+    char module_path[MAX_PATH]{};
+    if (!GetModuleFileNameA(module, module_path, MAX_PATH)) return;
+    char* slash = std::strrchr(module_path, '\\');
+    if (!slash) slash = std::strrchr(module_path, '/');
+    if (!slash) return;
+    *(slash + 1) = '\0';
+    g_settings_path = module_path;
+    g_settings_path += "BoonPanel.ini";
+
+    auto read_bool = [&](const char* section, const char* key, bool current) {
+        return GetPrivateProfileIntA(section, key, current ? 1 : 0,
+            g_settings_path.c_str()) != 0;
+    };
+    auto read_float = [&](const char* key, float current) {
+        char text[64]{};
+        std::snprintf(text, sizeof(text), "%.4f", current);
+        GetPrivateProfileStringA("Appearance", key, text, text,
+            static_cast<DWORD>(sizeof(text)), g_settings_path.c_str());
+        char* end = nullptr;
+        const float parsed = std::strtof(text, &end);
+        return end != text ? parsed : current;
+    };
+
+    g_visible = read_bool("General", "Visible", g_visible);
+    g_hide_title_bar = read_bool("General", "HideTitleBar", g_hide_title_bar);
+    g_show_duration = read_bool("General", "ShowDuration", g_show_duration);
+    g_show_inactive = read_bool("General", "ShowInactive", g_show_inactive);
+    g_show_stack_counts = read_bool("General", "ShowStackCounts", g_show_stack_counts);
+    g_horizontal_layout = read_bool("General", "HorizontalLayout", g_horizontal_layout);
+    g_sort_by_category = read_bool("General", "SortByCategory", g_sort_by_category);
+    for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
+        char key[32]{};
+        std::snprintf(key, sizeof(key), "Boon%zu", i);
+        g_boon_enabled[i] = read_bool("General", key, g_boon_enabled[i]);
+    }
+
+    g_tile_size = (std::max)(28.0f, (std::min)(64.0f, read_float("TileSize", g_tile_size)));
+    g_icon_spacing = (std::max)(0.0f, (std::min)(18.0f, read_float("IconSpacing", g_icon_spacing)));
+    g_timer_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("TimerFontSize", g_timer_font_size)));
+    g_stack_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("StackFontSize", g_stack_font_size)));
+    g_fallback_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("FallbackFontSize", g_fallback_font_size)));
+
+    const char* color_keys[] = {"TimerFontColor", "StackFontColor",
+        "FallbackFontColor", "DurationOutlineColor"};
+    ImVec4* colors[] = {&g_timer_font_color, &g_stack_font_color,
+        &g_fallback_font_color, &g_duration_outline_color};
+    for (std::size_t i = 0; i < 4; ++i) {
+        char text[128]{};
+        std::snprintf(text, sizeof(text), "%.4f,%.4f,%.4f,%.4f",
+            colors[i]->x, colors[i]->y, colors[i]->z, colors[i]->w);
+        GetPrivateProfileStringA("Appearance", color_keys[i], text, text,
+            static_cast<DWORD>(sizeof(text)), g_settings_path.c_str());
+        float r, g, b, a;
+        if (std::sscanf(text, "%f,%f,%f,%f", &r, &g, &b, &a) == 4) {
+            *colors[i] = ImVec4(r, g, b, a);
+        }
+    }
+    g_last_saved_signature = SettingsSignature();
+}
 
 // Offensive -> defensive -> support/utility. Stable sorting preserves the
 // original boon order within each category.
@@ -335,6 +487,7 @@ void AddonRender() {
             ImGui::EndPopup();
         }
     }
+    SaveSettingsIfChanged();
     ImGui::End();
 }
 
@@ -398,6 +551,7 @@ void AddonOptions() {
 
     ImGui::Spacing();
     ImGui::TextDisabled("The boon panel background is transparent. Countdown rings update continuously.");
+    SaveSettingsIfChanged();
 }
 
 void AddonLoad(AddonAPI_t* api) {
@@ -413,6 +567,7 @@ void AddonLoad(AddonAPI_t* api) {
         reinterpret_cast<void* (*)(std::size_t, void*)>(g_api->ImguiMalloc),
         reinterpret_cast<void (*)(void*, void*)>(g_api->ImguiFree));
 
+    LoadSettings();
     g_shared.Open();
     PreloadBoonTextures();
     g_api->GUI_Register(RT_Render, AddonRender);
