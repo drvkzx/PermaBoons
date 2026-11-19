@@ -31,6 +31,13 @@ bool g_horizontal_layout = true;
 bool g_sort_by_category = false;
 float g_tile_size = 42.0f;
 float g_icon_spacing = 4.0f;
+// Independent text styling for the three text elements drawn in the overlay.
+float g_timer_font_size = 13.0f;
+float g_stack_font_size = 12.0f;
+float g_fallback_font_size = 14.0f;
+ImVec4 g_timer_font_color = ImVec4(0.92f, 0.94f, 0.98f, 0.92f);
+ImVec4 g_stack_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+ImVec4 g_fallback_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 std::array<std::uint32_t, boonpanel::kBoonCount> g_ring_total_ms{};
 std::array<std::uint32_t, boonpanel::kBoonCount> g_last_remaining_ms{};
 
@@ -84,11 +91,19 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
         } else {
             // Keep a legible fallback while the icon is downloading or if the
             // remote image is unavailable.
-            const ImVec2 label_size = ImGui::CalcTextSize(boon.short_name);
-            draw->AddText(ImVec2(pos.x + (tile - label_size.x) * 0.5f,
+            const ImVec2 label_size = ImGui::GetFont()->CalcTextSizeA(g_fallback_font_size, 1000000.0f, 0.0f,
+                                                                boon.short_name);
+            ImVec4 label_color = g_fallback_font_color;
+            if (!active) {
+                label_color.x *= 0.62f;
+                label_color.y *= 0.62f;
+                label_color.z *= 0.62f;
+                label_color.w *= 0.75f;
+            }
+            draw->AddText(nullptr, g_fallback_font_size,
+                          ImVec2(pos.x + (tile - label_size.x) * 0.5f,
                                  pos.y + (tile - label_size.y) * 0.5f),
-                          active ? IM_COL32(255, 255, 255, 255)
-                                 : IM_COL32(155, 160, 168, 190), boon.short_name);
+                          ImGui::ColorConvertFloat4ToU32(label_color), boon.short_name);
         }
     }
 
@@ -105,15 +120,16 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
         const float fraction = (std::max)(0.0f, (std::min)(1.0f,
             static_cast<float>(remaining_ms) / static_cast<float>((std::max)(1u, g_ring_total_ms[index]))));
         constexpr int kPentagonSides = 5;
-        // GW2 boon artwork uses a shield-like pentagon, not a regular polygon:
-        // pointed crown, sloped shoulders, tapered lower sides and a flat base.
-        // These normalized points are inset to follow the visible icon border.
+        // Match the GW2 boon-frame silhouette: pointed crown and sloped
+        // shoulders, then perfectly vertical side walls and a flat base.
+        // The lower two corners are square (90 degrees), not tapered.
+        // Coordinates are normalized to the icon tile and inset to its border.
         constexpr float shape[kPentagonSides][2] = {
             {0.50f, 0.035f}, // top point
-            {0.895f, 0.265f}, // upper-right shoulder
-            {0.815f, 0.925f}, // lower-right corner
-            {0.185f, 0.925f}, // lower-left corner
-            {0.105f, 0.265f}  // upper-left shoulder
+            {0.885f, 0.275f}, // upper-right shoulder / start of vertical wall
+            {0.885f, 0.925f}, // lower-right 90-degree corner
+            {0.115f, 0.925f}, // lower-left 90-degree corner
+            {0.115f, 0.275f}  // upper-left shoulder / end of vertical wall
         };
         std::array<ImVec2, kPentagonSides> vertices{};
         float perimeter = 0.0f;
@@ -154,12 +170,14 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
     if (active && boon.stacks_in_intensity && g_show_stack_counts && stacks > 0) {
         char stack_text[8]{};
         std::snprintf(stack_text, sizeof(stack_text), "%u", stacks);
-        const ImVec2 text_size = ImGui::CalcTextSize(stack_text);
+        const ImVec2 text_size = ImGui::GetFont()->CalcTextSizeA(g_stack_font_size, 1000000.0f, 0.0f,
+                                                           stack_text);
         const ImVec2 badge_min(pos.x + tile - text_size.x - 10.0f, pos.y + 2.0f);
         const ImVec2 badge_max(pos.x + tile - 2.0f, pos.y + text_size.y + 6.0f);
         draw->AddRectFilled(badge_min, badge_max, IM_COL32(0, 0, 0, 205), 4.0f);
-        draw->AddText(ImVec2(badge_min.x + 3.0f, badge_min.y + 1.0f),
-                      IM_COL32(255, 255, 255, 255), stack_text);
+        draw->AddText(nullptr, g_stack_font_size,
+                      ImVec2(badge_min.x + 3.0f, badge_min.y + 1.0f),
+                      ImGui::ColorConvertFloat4ToU32(g_stack_font_color), stack_text);
     }
 
     if (g_show_duration && active) {
@@ -169,9 +187,11 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
         } else {
             std::snprintf(timer, sizeof(timer), "%.1f", static_cast<double>(remaining_ms) / 1000.0);
         }
-        const ImVec2 timer_size = ImGui::CalcTextSize(timer);
+        const ImVec2 timer_size = ImGui::GetFont()->CalcTextSizeA(g_timer_font_size, 1000000.0f, 0.0f,
+                                                           timer);
         const ImVec2 timer_pos(pos.x + (tile - timer_size.x) * 0.5f, pos.y + tile - 1.0f);
-        draw->AddText(timer_pos, IM_COL32(235, 238, 245, 235), timer);
+        draw->AddText(nullptr, g_timer_font_size, timer_pos,
+                      ImGui::ColorConvertFloat4ToU32(g_timer_font_color), timer);
     }
 
     if (hovered) {
@@ -200,6 +220,11 @@ void AddonRender() {
 
     boonpanel::SharedSnapshot snapshot{};
     const bool read_ok = g_shared.Read(snapshot);
+    // Match ArcDPS windows: hide the overlay while a map transition is in progress.
+    // ArcDPS clears this flag when the local player agent is created in the new map.
+    if (read_ok && snapshot.map_loading != 0) {
+        return;
+    }
     const std::uint64_t now = boonpanel::TickNowMs();
 
     ImGuiWindowFlags window_flags = ImGuiWindowFlags_AlwaysAutoResize |
@@ -323,6 +348,23 @@ void AddonOptions() {
     ImGui::Checkbox("Sort by boon category", &g_sort_by_category);
     ImGui::SliderFloat("Icon size", &g_tile_size, 28.0f, 64.0f, "%.0f px");
     ImGui::SliderFloat("Icon spacing", &g_icon_spacing, 0.0f, 18.0f, "%.0f px");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::TextUnformatted("Text appearance");
+    ImGui::TextUnformatted("Boon duration (seconds)");
+    ImGui::SliderFloat("Duration font size", &g_timer_font_size, 8.0f, 24.0f, "%.0f px");
+    ImGui::ColorEdit4("Duration font color", &g_timer_font_color.x);
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Boon stacks");
+    ImGui::SliderFloat("Stack font size", &g_stack_font_size, 8.0f, 24.0f, "%.0f px");
+    ImGui::ColorEdit4("Stack font color", &g_stack_font_color.x);
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Fallback boon name (while icon is unavailable)");
+    ImGui::SliderFloat("Boon name font size", &g_fallback_font_size, 8.0f, 24.0f, "%.0f px");
+    ImGui::ColorEdit4("Boon name font color", &g_fallback_font_color.x);
 
     ImGui::Spacing();
     ImGui::TextDisabled("The boon panel background is transparent. Countdown rings update continuously.");

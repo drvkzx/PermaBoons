@@ -41,6 +41,7 @@ bool SharedState::Open() noexcept {
         view_->magic = kSharedMagic;
         view_->version = kSharedVersion;
         view_->feed_seen = 0;
+        view_->map_loading = 0;
         std::memset(&view_->diagnostics, 0, sizeof(view_->diagnostics));
         std::memset(view_->track_count, 0, sizeof(view_->track_count));
         std::memset(view_->expires_at_ms, 0, sizeof(view_->expires_at_ms));
@@ -63,7 +64,7 @@ void SharedState::Close() noexcept {
 
 void SharedState::Publish(const std::uint32_t* track_count,
                           const std::uint64_t* flattened_expiries,
-                          bool feed_seen) noexcept {
+                          bool feed_seen, bool map_loading) noexcept {
     if (!view_ || !track_count || !flattened_expiries) {
         return;
     }
@@ -73,6 +74,7 @@ void SharedState::Publish(const std::uint32_t* track_count,
     view_->magic = kSharedMagic;
     view_->version = kSharedVersion;
     view_->feed_seen = feed_seen ? 1u : 0u;
+    view_->map_loading = map_loading ? 1u : 0u;
     std::memcpy(view_->track_count, track_count, sizeof(view_->track_count));
     std::memcpy(view_->expires_at_ms, flattened_expiries, sizeof(view_->expires_at_ms));
     MemoryBarrier();
@@ -103,6 +105,7 @@ bool SharedState::Read(SharedSnapshot& out) const noexcept {
         out.magic = view_->magic;
         out.version = view_->version;
         out.feed_seen = view_->feed_seen;
+        out.map_loading = view_->map_loading;
         out.diagnostics = view_->diagnostics;
         std::memcpy(out.track_count, view_->track_count, sizeof(out.track_count));
         std::memcpy(out.expires_at_ms, view_->expires_at_ms, sizeof(out.expires_at_ms));

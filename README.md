@@ -19,7 +19,7 @@ Guild Wars 2/
 
 - Displays the 12 standard boons using their original Guild Wars 2 boon artwork: Aegis, Alacrity, Fury, Might, Protection, Quickness, Regeneration, Resistance, Resolution, Stability, Swiftness and Vigor.
 - Uses Nexus' texture service to download and cache the small PNG icons from the Guild Wars 2 Wiki's file redirects. The first load requires an internet connection; icons are cached by Nexus for the game session. If an icon cannot be loaded, its short text label is shown as a fallback.
-- Shows a smooth shield-shaped five-sided countdown outline fitted to each active boon icon, plus a compact numeric timer below it. The pentagon outline resets when a boon is refreshed; Might and Stability retain their stack badges and show the next stack expiry.
+- Shows a smooth shield-shaped five-sided countdown outline fitted to each active boon icon, with straight vertical side walls and square lower corners, plus a compact numeric timer below it. The pentagon outline resets when a boon is refreshed; Might and Stability retain their stack badges and show the next stack expiry.
 - Uses a transparent, draggable Nexus/ImGui window. The default layout is a compact horizontal row; all controls are available from **Nexus → Addons → BoonPanel → Configure** (icon size, icon spacing, optional category sorting, horizontal/grid layout, inactive icons, durations, stack counts and overlay visibility). Category sorting groups offensive boons first, defensive boons second, and support/utility boons last.
 - Tracks boons on the local character whether applied by you or by an ally. Expiration timestamps are shared between the Nexus and ArcDPS module instances so countdowns tick smoothly.
 - Compensates for ArcDPS delayed area events using event timestamps; it does not add an artificial display delay.
@@ -108,3 +108,23 @@ Right-click anywhere on the BoonPanel window (including over a boon icon) to ope
 ### Horizontal and vertical boon arrangement
 
 Open Nexus Addons → BoonPanel → Configure. Under **Layout → Boon arrangement**, choose **Horizontal** to place enabled boon icons in a row, or **Vertical** to stack them in a single column. Icon spacing and icon size apply to both arrangements.
+
+
+### Boon outline geometry
+
+The countdown follows the boon frame silhouette: a pointed top, angled upper shoulders, straight vertical left and right walls, and a flat bottom. The two lower corners are 90 degrees; the lower sides are no longer tapered.
+
+
+### Text appearance settings
+
+The Nexus Configure panel includes independent font size and color controls for:
+- Boon duration values (seconds, or minutes for longer durations)
+- Intensity stack counts
+- Fallback boon-name text shown while an icon is unavailable
+
+These settings affect the overlay text without changing boon tracking, timer calculations, or the duration outline.
+
+
+### Hide during map loading
+
+BoonPanel automatically hides its overlay when ArcDPS reports a map change. It becomes visible again when ArcDPS reports that the local player agent has been created in the destination map. Boon tracking is cleared on map change as before; the feature does not alter boon duration calculations.

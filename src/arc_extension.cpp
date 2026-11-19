@@ -22,6 +22,7 @@ std::array<StackMap, boonpanel::kBoonCount> g_tracked;
 std::mutex g_tracker_mutex;
 boonpanel::SharedState g_shared;
 bool g_feed_seen = false;
+bool g_map_loading = false;
 std::uint32_t g_synthetic_id = 1;
 
 // ArcDPS area combat callbacks are intentionally delivered about 2-3 seconds
@@ -122,7 +123,7 @@ void PublishSnapshot(std::uint64_t now) {
         track_counts[i] = static_cast<std::uint32_t>(slot);
     }
 
-    g_shared.Publish(track_counts.data(), expiries.data(), g_feed_seen);
+    g_shared.Publish(track_counts.data(), expiries.data(), g_feed_seen, g_map_loading);
 }
 
 boonpanel::SharedDiagnostics g_diag{};
@@ -172,6 +173,7 @@ void OnCombatEvent(ArcCbtEvent* ev, ArcAgent* src, ArcAgent* dst,
         // ArcDPS agent-add notifications carry the local-player marker in dst->self.
         if (src && dst && dst->self != 0 && src->id != 0) {
             g_diag.local_agent_id = static_cast<std::uint64_t>(src->id);
+            g_map_loading = false;
         }
         g_diag.bridge_open = g_shared.IsOpen() ? 1 : 0;
         g_feed_seen = true;
@@ -201,6 +203,7 @@ void OnCombatEvent(ArcCbtEvent* ev, ArcAgent* src, ArcAgent* dst,
     }
 
     if (ev->is_statechange == CBTS_MAPCHANGE) {
+        g_map_loading = true;
         for (auto& boon_stacks : g_tracked) boon_stacks.clear();
         g_shared.PublishDiagnostics(g_diag);
         PublishSnapshot(now);
@@ -301,6 +304,7 @@ ArcDpsExports* ArcModInit() {
             boon_stacks.clear();
         }
         g_feed_seen = false;
+        g_map_loading = false;
         g_diag = {};
         g_diag.bridge_open = bridge_ok ? 1 : 0;
         g_seen_event_ids.clear();
@@ -326,6 +330,7 @@ void ArcModRelease() {
             boon_stacks.clear();
         }
         g_feed_seen = false;
+        g_map_loading = false;
         g_diag = {};
         g_seen_event_ids.clear();
         g_seen_order.clear();
