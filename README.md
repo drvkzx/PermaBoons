@@ -176,3 +176,12 @@ The timer window now has independent appearance controls in Nexus > BoonPanel > 
 - Timer window font color (including alpha)
 
 These settings are stored in BoonPanel.ini and persist across game restarts.
+
+
+Well of Corruption timer timing: the timer starts at ArcDPS callback receipt time and runs for 38.9 seconds total (40.0 - 1.1). It does not use Arc combat timestamps or the boon-tracking delay calibration. Further matching events do not reset an active timer.
+
+
+### Nexus font integration
+
+- The **Follow Nexus font** option is enabled by default and uses the font currently selected in Nexus for boon labels, duration text, stack counts, and the Well of Corruption timer window.
+- Disable it to use the default ImGui font instead. Existing font size and color controls remain available, and the preference is saved in `BoonPanel.ini`.

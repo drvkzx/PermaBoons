@@ -36,6 +36,7 @@ bool g_sort_by_category = false;
 bool g_show_well_timer = true;
 bool g_woc_hide_background = false;
 bool g_woc_hide_title_bar = false;
+bool g_follow_nexus_font = true;
 float g_woc_window_font_size = 16.0f;
 ImVec4 g_woc_window_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 float g_tile_size = 42.0f;
@@ -59,10 +60,10 @@ std::string SettingsSignature() {
     char buffer[2048]{};
     int used = std::snprintf(
         buffer, sizeof(buffer),
-        "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
+        "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
         g_visible, g_hide_title_bar, g_show_duration, g_show_inactive,
         g_show_stack_counts, g_horizontal_layout, g_sort_by_category, g_show_well_timer,
-        g_woc_hide_background, g_woc_hide_title_bar, g_tile_size, g_icon_spacing,
+        g_woc_hide_background, g_woc_hide_title_bar, g_follow_nexus_font, g_tile_size, g_icon_spacing,
         g_timer_font_size, g_stack_font_size, g_fallback_font_size, g_woc_window_font_size,
         g_woc_window_font_color.x, g_woc_window_font_color.y,
         g_woc_window_font_color.z, g_woc_window_font_color.w,
@@ -116,6 +117,7 @@ void SaveSettingsIfChanged() {
     write_bool("ShowWellOfCorruptionTimer", g_show_well_timer);
     write_bool("WellTimerHideBackground", g_woc_hide_background);
     write_bool("WellTimerHideTitleBar", g_woc_hide_title_bar);
+    write_bool("FollowNexusFont", g_follow_nexus_font);
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         char key[32]{};
         std::snprintf(key, sizeof(key), "Boon%zu", i);
@@ -181,6 +183,7 @@ void LoadSettings() {
     g_show_well_timer = read_bool("General", "ShowWellOfCorruptionTimer", g_show_well_timer);
     g_woc_hide_background = read_bool("General", "WellTimerHideBackground", g_woc_hide_background);
     g_woc_hide_title_bar = read_bool("General", "WellTimerHideTitleBar", g_woc_hide_title_bar);
+    g_follow_nexus_font = read_bool("General", "FollowNexusFont", g_follow_nexus_font);
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         char key[32]{};
         std::snprintf(key, sizeof(key), "Boon%zu", i);
@@ -210,6 +213,16 @@ void LoadSettings() {
         }
     }
     g_last_saved_signature = SettingsSignature();
+}
+
+// Follow the font selected by Nexus (the current ImGui font) by default.
+// When disabled, use the first/default font in the shared ImGui atlas.
+ImFont* BoonPanelFont() {
+    ImGuiIO& io = ImGui::GetIO();
+    if (g_follow_nexus_font || !io.Fonts || io.Fonts->Fonts.Size == 0) {
+        return ImGui::GetFont();
+    }
+    return io.Fonts->Fonts[0];
 }
 
 // Offensive -> defensive -> support/utility. Stable sorting preserves the
@@ -296,7 +309,7 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
     } else {
         // Keep a legible fallback while the preloaded icon is downloading or
         // if the remote image is unavailable.
-        const ImVec2 label_size = ImGui::GetFont()->CalcTextSizeA(g_fallback_font_size, 1000000.0f, 0.0f,
+        const ImVec2 label_size = BoonPanelFont()->CalcTextSizeA(g_fallback_font_size, 1000000.0f, 0.0f,
                                                             boon.short_name);
         ImVec4 label_color = g_fallback_font_color;
         if (!active) {
@@ -305,7 +318,7 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
             label_color.z *= 0.62f;
             label_color.w *= 0.75f;
         }
-        draw->AddText(nullptr, g_fallback_font_size,
+        draw->AddText(BoonPanelFont(), g_fallback_font_size,
                       ImVec2(pos.x + (tile - label_size.x) * 0.5f,
                              pos.y + (tile - label_size.y) * 0.5f),
                       ImGui::ColorConvertFloat4ToU32(label_color), boon.short_name);
@@ -374,12 +387,12 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
     if (active && boon.stacks_in_intensity && g_show_stack_counts && stacks > 0) {
         char stack_text[8]{};
         std::snprintf(stack_text, sizeof(stack_text), "%u", stacks);
-        const ImVec2 text_size = ImGui::GetFont()->CalcTextSizeA(g_stack_font_size, 1000000.0f, 0.0f,
+        const ImVec2 text_size = BoonPanelFont()->CalcTextSizeA(g_stack_font_size, 1000000.0f, 0.0f,
                                                            stack_text);
         const ImVec2 badge_min(pos.x + tile - text_size.x - 10.0f, pos.y + 2.0f);
         const ImVec2 badge_max(pos.x + tile - 2.0f, pos.y + text_size.y + 6.0f);
         draw->AddRectFilled(badge_min, badge_max, IM_COL32(0, 0, 0, 205), 4.0f);
-        draw->AddText(nullptr, g_stack_font_size,
+        draw->AddText(BoonPanelFont(), g_stack_font_size,
                       ImVec2(badge_min.x + 3.0f, badge_min.y + 1.0f),
                       ImGui::ColorConvertFloat4ToU32(g_stack_font_color), stack_text);
     }
@@ -391,10 +404,10 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
         } else {
             std::snprintf(timer, sizeof(timer), "%.1f", static_cast<double>(remaining_ms) / 1000.0);
         }
-        const ImVec2 timer_size = ImGui::GetFont()->CalcTextSizeA(g_timer_font_size, 1000000.0f, 0.0f,
+        const ImVec2 timer_size = BoonPanelFont()->CalcTextSizeA(g_timer_font_size, 1000000.0f, 0.0f,
                                                            timer);
         const ImVec2 timer_pos(pos.x + (tile - timer_size.x) * 0.5f, pos.y + tile - 1.0f);
-        draw->AddText(nullptr, g_timer_font_size, timer_pos,
+        draw->AddText(BoonPanelFont(), g_timer_font_size, timer_pos,
                       ImGui::ColorConvertFloat4ToU32(g_timer_font_color), timer);
     }
 
@@ -439,6 +452,7 @@ void AddonRender() {
         if (g_woc_hide_background) timer_flags |= ImGuiWindowFlags_NoBackground;
         if (g_woc_hide_title_bar) timer_flags |= ImGuiWindowFlags_NoTitleBar;
         ImGui::PushStyleColor(ImGuiCol_Text, g_woc_window_font_color);
+        if (!g_follow_nexus_font) ImGui::PushFont(BoonPanelFont());
         if (ImGui::Begin("Well of Corruption##BoonPanelWellTimer", nullptr, timer_flags)) {
             const float base_font_size = ImGui::GetFontSize();
             ImGui::SetWindowFontScale(g_woc_window_font_size / base_font_size);
@@ -448,6 +462,7 @@ void AddonRender() {
             ImGui::SetWindowFontScale(1.0f);
         }
         ImGui::End();
+        if (!g_follow_nexus_font) ImGui::PopFont();
         ImGui::PopStyleColor();
     }
 
@@ -589,6 +604,10 @@ void AddonOptions() {
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::TextUnformatted("Text appearance");
+    ImGui::Checkbox("Follow Nexus font", &g_follow_nexus_font);
+    ImGui::TextDisabled(g_follow_nexus_font
+        ? "Using the font currently selected in Nexus."
+        : "Using the default ImGui font.");
     ImGui::TextUnformatted("Boon duration (seconds)");
     ImGui::ColorEdit4("Duration outline color", &g_duration_outline_color.x);
     ImGui::Spacing();
