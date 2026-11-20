@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(BoonPanel LANGUAGES CXX)
+project(BoonPanel LANGUAGES CXX RC)
 
 if(NOT WIN32)
     message(FATAL_ERROR "BoonPanel is a Windows x64 Guild Wars 2 DLL. Build it with Windows or GitHub Actions windows-2022.")
@@ -51,6 +51,7 @@ add_library(BoonPanel SHARED
     src/nexus_addon.cpp
     src/arc_extension.cpp
     src/shared_state.cpp
+    resources/BoonPanel.rc
 )
 target_compile_features(BoonPanel PRIVATE cxx_std_20)
 target_include_directories(BoonPanel PRIVATE

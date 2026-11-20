@@ -12,6 +12,7 @@
 #include "imgui.h"
 
 #include "boons.h"
+#include "../resources/resource.h"
 #include "shared_state.h"
 
 namespace {
@@ -32,6 +33,7 @@ std::array<bool, boonpanel::kBoonCount> g_boon_enabled = [] {
 }();
 bool g_horizontal_layout = true;
 bool g_sort_by_category = false;
+bool g_show_well_timer = true;
 float g_tile_size = 42.0f;
 float g_icon_spacing = 4.0f;
 // Independent text styling for the three text elements drawn in the overlay.
@@ -53,9 +55,9 @@ std::string SettingsSignature() {
     char buffer[2048]{};
     int used = std::snprintf(
         buffer, sizeof(buffer),
-        "%d|%d|%d|%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
+        "%d|%d|%d|%d|%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
         g_visible, g_hide_title_bar, g_show_duration, g_show_inactive,
-        g_show_stack_counts, g_horizontal_layout, g_sort_by_category, g_tile_size, g_icon_spacing,
+        g_show_stack_counts, g_horizontal_layout, g_sort_by_category, g_show_well_timer, g_tile_size, g_icon_spacing,
         g_timer_font_size, g_stack_font_size, g_fallback_font_size,
         g_timer_font_color.x, g_timer_font_color.y, g_timer_font_color.z,
         g_timer_font_color.w, g_stack_font_color.x, g_stack_font_color.y,
@@ -104,6 +106,7 @@ void SaveSettingsIfChanged() {
     write_bool("ShowStackCounts", g_show_stack_counts);
     write_bool("HorizontalLayout", g_horizontal_layout);
     write_bool("SortByCategory", g_sort_by_category);
+    write_bool("ShowWellOfCorruptionTimer", g_show_well_timer);
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         char key[32]{};
         std::snprintf(key, sizeof(key), "Boon%zu", i);
@@ -165,6 +168,7 @@ void LoadSettings() {
     g_show_stack_counts = read_bool("General", "ShowStackCounts", g_show_stack_counts);
     g_horizontal_layout = read_bool("General", "HorizontalLayout", g_horizontal_layout);
     g_sort_by_category = read_bool("General", "SortByCategory", g_sort_by_category);
+    g_show_well_timer = read_bool("General", "ShowWellOfCorruptionTimer", g_show_well_timer);
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         char key[32]{};
         std::snprintf(key, sizeof(key), "Boon%zu", i);
@@ -205,40 +209,49 @@ int BoonCategory(std::size_t index) {
     }
 }
 
-// These are the original Guild Wars 2 boon icons mirrored by the GW2 Wiki.
-// Start all requests as soon as the addon loads instead of waiting until each
-// boon becomes visible. Nexus caches textures by identifier for the game session.
-constexpr const char* kBoonIconFiles[boonpanel::kBoonCount] = {
-    "Aegis.png", "Alacrity.png", "Fury.png", "Might.png",
-    "Protection.png", "Quickness.png", "Regeneration.png", "Resistance.png",
-    "Resolution.png", "Stability.png", "Swiftness.png", "Vigor.png"
-};
+// Boon icons are embedded as PNG resources in the DLL. Nexus decodes these
+// resources and uploads them to DirectX, so no network download is needed.
 std::array<Texture_t*, boonpanel::kBoonCount> g_boon_textures{};
 
+HMODULE AddonModule() {
+    HMODULE module = nullptr;
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+        GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        reinterpret_cast<LPCSTR>(&AddonModule), &module);
+    return module;
+}
+
+constexpr unsigned kBoonResourceIds[boonpanel::kBoonCount] = {
+    IDB_BOON_AEGIS, IDB_BOON_ALACRITY, IDB_BOON_FURY, IDB_BOON_MIGHT,
+    IDB_BOON_PROTECTION, IDB_BOON_QUICKNESS, IDB_BOON_REGENERATION,
+    IDB_BOON_RESISTANCE, IDB_BOON_RESOLUTION, IDB_BOON_STABILITY,
+    IDB_BOON_SWIFTNESS, IDB_BOON_VIGOR
+};
+
 void RequestBoonTexture(std::size_t index) {
-    if (!g_api || !g_api->Textures_GetOrCreateFromURL || index >= boonpanel::kBoonCount ||
-        g_boon_textures[index] != nullptr) {
+    if (!g_api || !g_api->Textures_GetOrCreateFromResource ||
+        index >= boonpanel::kBoonCount || g_boon_textures[index] != nullptr) {
         return;
     }
-
+    HMODULE module = AddonModule();
+    if (!module) return;
     char identifier[64]{};
-    std::snprintf(identifier, sizeof(identifier), "TEX_BOONPANEL_%s", boonpanel::kBoons[index].short_name);
-    char endpoint[160]{};
-    std::snprintf(endpoint, sizeof(endpoint), "/wiki/Special:Redirect/file/%s", kBoonIconFiles[index]);
-    g_boon_textures[index] = g_api->Textures_GetOrCreateFromURL(
-        identifier, "https://wiki.guildwars2.com", endpoint);
+    std::snprintf(identifier, sizeof(identifier), "TEX_BOONPANEL_%s",
+        boonpanel::kBoons[index].short_name);
+    g_boon_textures[index] = g_api->Textures_GetOrCreateFromResource(
+        identifier, kBoonResourceIds[index], module);
 }
 
 void PreloadBoonTextures() {
-    // Kick off every icon download at addon startup, including icons currently
-    // disabled in the user's boon selection. The calls are non-blocking.
+    // Load every embedded icon at addon startup, including icons currently
+    // disabled in the user's boon selection. Nexus reads the PNG resources locally; no web request is made.
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         RequestBoonTexture(i);
     }
 }
 
 void RefreshPendingBoonTextures() {
-    // GetOrCreate also returns an already-cached texture. Poll only entries
+    // GetOrCreate returns the texture once Nexus has finished decoding/uploading. Poll only entries
     // that have not completed yet, so there is no repeated work after loading.
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         if (g_boon_textures[i] == nullptr) {
@@ -394,9 +407,6 @@ void DrawBoonTile(std::size_t index, std::uint32_t stacks,
 void AddonRender() {
     // Keep loading independent of visibility and boon-selection settings.
     RefreshPendingBoonTextures();
-    if (!g_visible) {
-        return;
-    }
 
     boonpanel::SharedSnapshot snapshot{};
     const bool read_ok = g_shared.Read(snapshot);
@@ -406,6 +416,25 @@ void AddonRender() {
         return;
     }
     const std::uint64_t now = boonpanel::TickNowMs();
+
+    // Independent window: it remains visible at 0.0 after the first trigger,
+    // until the user hides it in Nexus options. Countdown is event-time based.
+    if (read_ok && g_show_well_timer && snapshot.well_timer_expires_at_ms != 0) {
+        const std::uint64_t remaining_ms = snapshot.well_timer_expires_at_ms > now
+            ? snapshot.well_timer_expires_at_ms - now : 0;
+        ImGuiWindowFlags timer_flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse;
+        if (ImGui::Begin("Well of Corruption##BoonPanelWellTimer", nullptr, timer_flags)) {
+            ImGui::TextUnformatted("Well of Corruption");
+            ImGui::SameLine();
+            ImGui::Text("%.1f s", static_cast<double>(remaining_ms) / 1000.0);
+        }
+        ImGui::End();
+    }
+
+    if (!g_visible) {
+        SaveSettingsIfChanged();
+        return;
+    }
 
     ImGuiWindowFlags window_flags = ImGuiWindowFlags_AlwaysAutoResize |
                                     ImGuiWindowFlags_NoCollapse |
@@ -499,6 +528,7 @@ void AddonOptions() {
     ImGui::Checkbox("Show boon durations", &g_show_duration);
     ImGui::Checkbox("Show stack counts", &g_show_stack_counts);
     ImGui::Checkbox("Show inactive boon icons", &g_show_inactive);
+    ImGui::Checkbox("Show Well of Corruption timer window", &g_show_well_timer);
 
     ImGui::Spacing();
     ImGui::TextUnformatted("Boon selection");

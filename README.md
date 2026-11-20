@@ -147,3 +147,21 @@ BoonPanel automatically hides its overlay when ArcDPS reports a map change. It b
 BoonPanel now starts loading all 12 boon icons as soon as the Nexus addon initializes, rather than waiting for each boon tile to be drawn. The requests are asynchronous and use Nexus' texture cache. The render callback checks only textures that are still pending, so completed icons are reused without repeating URL construction or requests. Preloading also runs when the overlay is hidden and includes boons disabled in the display selection, so changing the selection later does not introduce a first-use download delay.
 
 The fallback boon abbreviation remains visible while an icon is downloading or if its request fails. This change improves request timing but still depends on the GW2 Wiki being reachable; the icon PNG files are not embedded in this package.
+
+
+## Bundled boon icons
+
+All 12 boon PNGs are compiled into `BoonPanel.dll` as Windows `PNG` resources.
+Nexus loads them with `Textures_GetOrCreateFromResource`, so the addon no
+longer downloads boon icons from the Guild Wars 2 Wiki at startup. The source
+PNGs and resource definitions are in `resources/`.
+
+### Well of Corruption timer
+
+BoonPanel includes a separate **Well of Corruption** countdown window. It listens
+for the local player's ArcDPS strike-damage event with skill ID `10545`, starts a
+40-second timer from the event timestamp, and uses the existing ArcDPS clock
+mapping (including the 2.6-second fallback delay estimate) so callback latency
+is accounted for. Additional matching events do not restart an active countdown.
+The window can be hidden in Nexus > BoonPanel > Configure. The timer resets on
+map change or ArcDPS module reload.

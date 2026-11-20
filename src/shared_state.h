@@ -8,7 +8,7 @@
 namespace boonpanel {
 
 inline constexpr std::uint32_t kSharedMagic = 0x42504E4Cu; // "BPNL"
-inline constexpr std::uint32_t kSharedVersion = 4;
+inline constexpr std::uint32_t kSharedVersion = 5;
 inline constexpr std::size_t kMaxTrackedStacks = 128;
 
 // Shared between the Nexus-loaded copy and the ArcDPS-loaded copy of this DLL.
@@ -38,6 +38,7 @@ struct SharedSnapshot {
     std::uint32_t version;
     std::uint32_t feed_seen;
     std::uint32_t map_loading;
+    std::uint64_t well_timer_expires_at_ms;
     SharedDiagnostics diagnostics;
     std::uint32_t track_count[kBoonCount];
     std::uint64_t expires_at_ms[kBoonCount][kMaxTrackedStacks];
@@ -56,6 +57,7 @@ public:
     bool IsOpen() const noexcept { return view_ != nullptr; }
 
     void PublishDiagnostics(const SharedDiagnostics& diagnostics) noexcept;
+    void PublishWellTimer(std::uint64_t expires_at_ms) noexcept;
 
     void Publish(const std::uint32_t* track_count,
                  const std::uint64_t* flattened_expiries,

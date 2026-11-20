@@ -24,6 +24,9 @@ boonpanel::SharedState g_shared;
 bool g_feed_seen = false;
 bool g_map_loading = false;
 std::uint32_t g_synthetic_id = 1;
+std::uint64_t g_well_timer_expires_at_ms = 0;
+constexpr std::uint32_t kWellOfCorruptionSkillId = 10545;
+constexpr std::uint64_t kWellTimerDurationMs = 40000;
 
 // ArcDPS area combat callbacks are intentionally delivered about 2-3 seconds
 // after the event. Use the event's combat-clock timestamp to backdate boon
@@ -202,8 +205,22 @@ void OnCombatEvent(ArcCbtEvent* ev, ArcAgent* src, ArcAgent* dst,
         return;
     }
 
+    // Start a single 40-second Well of Corruption timer from the Arc combat
+    // event timestamp. EventTickMs maps Arc's combat clock to GetTickCount64,
+    // compensating for the ~2.6s delayed area callback. Ignore further casts
+    // while the current timer is still running.
+    if (ev->skillid == kWellOfCorruptionSkillId && ev->is_statechange == 0 &&
+        ev->buff == 0 && IsLocalSource(ev, src) && dst != nullptr && !IsSelf(dst)) {
+        if (now >= g_well_timer_expires_at_ms) {
+            g_well_timer_expires_at_ms = event_tick + kWellTimerDurationMs;
+            g_shared.PublishWellTimer(g_well_timer_expires_at_ms);
+        }
+    }
+
     if (ev->is_statechange == CBTS_MAPCHANGE) {
         g_map_loading = true;
+        g_well_timer_expires_at_ms = 0;
+        g_shared.PublishWellTimer(0);
         for (auto& boon_stacks : g_tracked) boon_stacks.clear();
         g_shared.PublishDiagnostics(g_diag);
         PublishSnapshot(now);
@@ -305,6 +322,8 @@ ArcDpsExports* ArcModInit() {
         }
         g_feed_seen = false;
         g_map_loading = false;
+        g_well_timer_expires_at_ms = 0;
+        g_shared.PublishWellTimer(0);
         g_diag = {};
         g_diag.bridge_open = bridge_ok ? 1 : 0;
         g_seen_event_ids.clear();
@@ -331,6 +350,8 @@ void ArcModRelease() {
         }
         g_feed_seen = false;
         g_map_loading = false;
+        g_well_timer_expires_at_ms = 0;
+        g_shared.PublishWellTimer(0);
         g_diag = {};
         g_seen_event_ids.clear();
         g_seen_order.clear();
