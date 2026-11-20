@@ -38,6 +38,7 @@ bool g_woc_hide_background = false;
 bool g_woc_hide_title_bar = false;
 bool g_follow_nexus_font = true;
 float g_woc_window_font_size = 16.0f;
+float g_woc_timer_duration_seconds = 40.0f;
 ImVec4 g_woc_window_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 float g_tile_size = 42.0f;
 float g_icon_spacing = 4.0f;
@@ -81,6 +82,9 @@ std::string SettingsSignature() {
     std::snprintf(tail, sizeof(tail), "%.3f|%.3f|",
         g_duration_outline_color.z, g_duration_outline_color.w);
     signature += tail;
+    char timer_duration[32]{};
+    std::snprintf(timer_duration, sizeof(timer_duration), "WOC%.2f|", g_woc_timer_duration_seconds);
+    signature += timer_duration;
     for (bool enabled : g_boon_enabled) {
         signature += enabled ? "1" : "0";
     }
@@ -130,6 +134,7 @@ void SaveSettingsIfChanged() {
     write_float("StackFontSize", g_stack_font_size);
     write_float("FallbackFontSize", g_fallback_font_size);
     write_float("WellTimerFontSize", g_woc_window_font_size);
+    write_float("WellTimerDurationSeconds", g_woc_timer_duration_seconds);
 
     const ImVec4 colors[] = {g_timer_font_color, g_stack_font_color,
         g_fallback_font_color, g_duration_outline_color, g_woc_window_font_color};
@@ -196,6 +201,7 @@ void LoadSettings() {
     g_stack_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("StackFontSize", g_stack_font_size)));
     g_fallback_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("FallbackFontSize", g_fallback_font_size)));
     g_woc_window_font_size = (std::max)(8.0f, (std::min)(36.0f, read_float("WellTimerFontSize", g_woc_window_font_size)));
+    g_woc_timer_duration_seconds = (std::max)(1.0f, (std::min)(120.0f, read_float("WellTimerDurationSeconds", g_woc_timer_duration_seconds)));
 
     const char* color_keys[] = {"TimerFontColor", "StackFontColor",
         "FallbackFontColor", "DurationOutlineColor", "WellTimerFontColor"};
@@ -569,6 +575,12 @@ void AddonOptions() {
     ImGui::Checkbox("Hide timer window title bar", &g_woc_hide_title_bar);
     ImGui::SliderFloat("Timer window font size", &g_woc_window_font_size, 8.0f, 36.0f, "%.0f px");
     ImGui::ColorEdit4("Timer window font color", &g_woc_window_font_color.x);
+    ImGui::SliderFloat("Well timer duration", &g_woc_timer_duration_seconds, 1.0f, 120.0f, "%.1f s");
+    ImGui::TextDisabled("Default: 40.0 seconds. No ArcDPS delay compensation is applied.");
+    if (g_shared.IsOpen()) {
+        const auto duration_ms = static_cast<std::uint32_t>(g_woc_timer_duration_seconds * 1000.0f + 0.5f);
+        g_shared.SetWellTimerDuration(duration_ms);
+    }
     ImGui::Unindent();
 
     ImGui::Spacing();
@@ -644,6 +656,9 @@ void AddonLoad(AddonAPI_t* api) {
 
     LoadSettings();
     g_shared.Open();
+    if (g_shared.IsOpen()) {
+        g_shared.SetWellTimerDuration(static_cast<std::uint32_t>(g_woc_timer_duration_seconds * 1000.0f + 0.5f));
+    }
     PreloadBoonTextures();
     g_api->GUI_Register(RT_Render, AddonRender);
     g_api->GUI_Register(RT_OptionsRender, AddonOptions);

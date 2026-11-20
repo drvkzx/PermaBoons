@@ -26,7 +26,7 @@ bool g_map_loading = false;
 std::uint32_t g_synthetic_id = 1;
 std::uint64_t g_well_timer_expires_at_ms = 0;
 constexpr std::uint32_t kWellOfCorruptionSkillId = 10545;
-constexpr std::uint64_t kWellTimerDurationMs = 38900;
+constexpr std::uint32_t kDefaultWellTimerDurationMs = 40000;
 
 // ArcDPS area combat callbacks are delivered about 0.1 seconds
 // after the event. Use the event's combat-clock timestamp to backdate boon
@@ -206,14 +206,19 @@ void OnCombatEvent(ArcCbtEvent* ev, ArcAgent* src, ArcAgent* dst,
     }
 
     // Start the Well of Corruption countdown when this event is received.
-    // Do not use Arc combat timestamps or any historical delay compensation
-    // for this timer. The requested 1.1-second allowance is added directly
-    // to the 40-second timer (41.1 seconds total). Ignore further casts while
-    // the current timer is still running.
+    // The duration is configured by the user in Nexus options (default 40s).
+    // This timer does not apply any historical ArcDPS delay compensation.
+    // Ignore further casts while the current timer is still running.
     if (ev->skillid == kWellOfCorruptionSkillId && ev->is_statechange == 0 &&
         ev->buff == 0 && IsLocalSource(ev, src) && dst != nullptr && !IsSelf(dst)) {
         if (now >= g_well_timer_expires_at_ms) {
-            g_well_timer_expires_at_ms = now + kWellTimerDurationMs;
+            boonpanel::SharedSnapshot config{};
+            std::uint32_t duration_ms = kDefaultWellTimerDurationMs;
+            if (g_shared.Read(config) && config.well_timer_duration_ms >= 1000 &&
+                config.well_timer_duration_ms <= 120000) {
+                duration_ms = config.well_timer_duration_ms;
+            }
+            g_well_timer_expires_at_ms = now + duration_ms;
             g_shared.PublishWellTimer(g_well_timer_expires_at_ms);
         }
     }

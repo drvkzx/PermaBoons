@@ -185,3 +185,6 @@ Well of Corruption timer timing: the timer starts at ArcDPS callback receipt tim
 
 - The **Follow Nexus font** option is enabled by default and uses the font currently selected in Nexus for boon labels, duration text, stack counts, and the Well of Corruption timer window.
 - Disable it to use the default ImGui font instead. Existing font size and color controls remain available, and the preference is saved in `BoonPanel.ini`.
+
+
+Well of Corruption timer duration is configurable in Nexus → BoonPanel → Configure. It defaults to 40.0 seconds, can be adjusted from 1.0 to 120.0 seconds, and is saved in BoonPanel.ini. No historical ArcDPS delay compensation is applied to this timer.
