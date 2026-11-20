@@ -34,6 +34,10 @@ std::array<bool, boonpanel::kBoonCount> g_boon_enabled = [] {
 bool g_horizontal_layout = true;
 bool g_sort_by_category = false;
 bool g_show_well_timer = true;
+bool g_woc_hide_background = false;
+bool g_woc_hide_title_bar = false;
+float g_woc_window_font_size = 16.0f;
+ImVec4 g_woc_window_font_color = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 float g_tile_size = 42.0f;
 float g_icon_spacing = 4.0f;
 // Independent text styling for the three text elements drawn in the overlay.
@@ -55,10 +59,13 @@ std::string SettingsSignature() {
     char buffer[2048]{};
     int used = std::snprintf(
         buffer, sizeof(buffer),
-        "%d|%d|%d|%d|%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
+        "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f|",
         g_visible, g_hide_title_bar, g_show_duration, g_show_inactive,
-        g_show_stack_counts, g_horizontal_layout, g_sort_by_category, g_show_well_timer, g_tile_size, g_icon_spacing,
-        g_timer_font_size, g_stack_font_size, g_fallback_font_size,
+        g_show_stack_counts, g_horizontal_layout, g_sort_by_category, g_show_well_timer,
+        g_woc_hide_background, g_woc_hide_title_bar, g_tile_size, g_icon_spacing,
+        g_timer_font_size, g_stack_font_size, g_fallback_font_size, g_woc_window_font_size,
+        g_woc_window_font_color.x, g_woc_window_font_color.y,
+        g_woc_window_font_color.z, g_woc_window_font_color.w,
         g_timer_font_color.x, g_timer_font_color.y, g_timer_font_color.z,
         g_timer_font_color.w, g_stack_font_color.x, g_stack_font_color.y,
         g_stack_font_color.z);
@@ -107,6 +114,8 @@ void SaveSettingsIfChanged() {
     write_bool("HorizontalLayout", g_horizontal_layout);
     write_bool("SortByCategory", g_sort_by_category);
     write_bool("ShowWellOfCorruptionTimer", g_show_well_timer);
+    write_bool("WellTimerHideBackground", g_woc_hide_background);
+    write_bool("WellTimerHideTitleBar", g_woc_hide_title_bar);
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         char key[32]{};
         std::snprintf(key, sizeof(key), "Boon%zu", i);
@@ -118,12 +127,13 @@ void SaveSettingsIfChanged() {
     write_float("TimerFontSize", g_timer_font_size);
     write_float("StackFontSize", g_stack_font_size);
     write_float("FallbackFontSize", g_fallback_font_size);
+    write_float("WellTimerFontSize", g_woc_window_font_size);
 
     const ImVec4 colors[] = {g_timer_font_color, g_stack_font_color,
-        g_fallback_font_color, g_duration_outline_color};
+        g_fallback_font_color, g_duration_outline_color, g_woc_window_font_color};
     const char* color_keys[] = {"TimerFontColor", "StackFontColor",
-        "FallbackFontColor", "DurationOutlineColor"};
-    for (std::size_t i = 0; i < 4; ++i) {
+        "FallbackFontColor", "DurationOutlineColor", "WellTimerFontColor"};
+    for (std::size_t i = 0; i < 5; ++i) {
         std::snprintf(value, sizeof(value), "%.4f,%.4f,%.4f,%.4f",
             colors[i].x, colors[i].y, colors[i].z, colors[i].w);
         SetIniValue("Appearance", color_keys[i], value);
@@ -169,6 +179,8 @@ void LoadSettings() {
     g_horizontal_layout = read_bool("General", "HorizontalLayout", g_horizontal_layout);
     g_sort_by_category = read_bool("General", "SortByCategory", g_sort_by_category);
     g_show_well_timer = read_bool("General", "ShowWellOfCorruptionTimer", g_show_well_timer);
+    g_woc_hide_background = read_bool("General", "WellTimerHideBackground", g_woc_hide_background);
+    g_woc_hide_title_bar = read_bool("General", "WellTimerHideTitleBar", g_woc_hide_title_bar);
     for (std::size_t i = 0; i < boonpanel::kBoonCount; ++i) {
         char key[32]{};
         std::snprintf(key, sizeof(key), "Boon%zu", i);
@@ -180,12 +192,13 @@ void LoadSettings() {
     g_timer_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("TimerFontSize", g_timer_font_size)));
     g_stack_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("StackFontSize", g_stack_font_size)));
     g_fallback_font_size = (std::max)(8.0f, (std::min)(24.0f, read_float("FallbackFontSize", g_fallback_font_size)));
+    g_woc_window_font_size = (std::max)(8.0f, (std::min)(36.0f, read_float("WellTimerFontSize", g_woc_window_font_size)));
 
     const char* color_keys[] = {"TimerFontColor", "StackFontColor",
-        "FallbackFontColor", "DurationOutlineColor"};
+        "FallbackFontColor", "DurationOutlineColor", "WellTimerFontColor"};
     ImVec4* colors[] = {&g_timer_font_color, &g_stack_font_color,
-        &g_fallback_font_color, &g_duration_outline_color};
-    for (std::size_t i = 0; i < 4; ++i) {
+        &g_fallback_font_color, &g_duration_outline_color, &g_woc_window_font_color};
+    for (std::size_t i = 0; i < 5; ++i) {
         char text[128]{};
         std::snprintf(text, sizeof(text), "%.4f,%.4f,%.4f,%.4f",
             colors[i]->x, colors[i]->y, colors[i]->z, colors[i]->w);
@@ -423,12 +436,19 @@ void AddonRender() {
         const std::uint64_t remaining_ms = snapshot.well_timer_expires_at_ms > now
             ? snapshot.well_timer_expires_at_ms - now : 0;
         ImGuiWindowFlags timer_flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse;
+        if (g_woc_hide_background) timer_flags |= ImGuiWindowFlags_NoBackground;
+        if (g_woc_hide_title_bar) timer_flags |= ImGuiWindowFlags_NoTitleBar;
+        ImGui::PushStyleColor(ImGuiCol_Text, g_woc_window_font_color);
         if (ImGui::Begin("Well of Corruption##BoonPanelWellTimer", nullptr, timer_flags)) {
+            const float base_font_size = ImGui::GetFontSize();
+            ImGui::SetWindowFontScale(g_woc_window_font_size / base_font_size);
             ImGui::TextUnformatted("Well of Corruption");
             ImGui::SameLine();
             ImGui::Text("%.1f s", static_cast<double>(remaining_ms) / 1000.0);
+            ImGui::SetWindowFontScale(1.0f);
         }
         ImGui::End();
+        ImGui::PopStyleColor();
     }
 
     if (!g_visible) {
@@ -529,6 +549,12 @@ void AddonOptions() {
     ImGui::Checkbox("Show stack counts", &g_show_stack_counts);
     ImGui::Checkbox("Show inactive boon icons", &g_show_inactive);
     ImGui::Checkbox("Show Well of Corruption timer window", &g_show_well_timer);
+    ImGui::Indent();
+    ImGui::Checkbox("Hide timer window background", &g_woc_hide_background);
+    ImGui::Checkbox("Hide timer window title bar", &g_woc_hide_title_bar);
+    ImGui::SliderFloat("Timer window font size", &g_woc_window_font_size, 8.0f, 36.0f, "%.0f px");
+    ImGui::ColorEdit4("Timer window font color", &g_woc_window_font_color.x);
+    ImGui::Unindent();
 
     ImGui::Spacing();
     ImGui::TextUnformatted("Boon selection");

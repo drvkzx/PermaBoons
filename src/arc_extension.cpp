@@ -28,11 +28,11 @@ std::uint64_t g_well_timer_expires_at_ms = 0;
 constexpr std::uint32_t kWellOfCorruptionSkillId = 10545;
 constexpr std::uint64_t kWellTimerDurationMs = 40000;
 
-// ArcDPS area combat callbacks are intentionally delivered about 2-3 seconds
+// ArcDPS area combat callbacks are delivered about 1.1 seconds
 // after the event. Use the event's combat-clock timestamp to backdate boon
 // expirations, rather than starting the duration when the delayed callback
 // finally arrives. Local callbacks calibrate Arc's clock to GetTickCount64.
-constexpr std::uint64_t kAreaCallbackDelayEstimateMs = 2600;
+constexpr std::uint64_t kAreaCallbackDelayEstimateMs = 1100;
 std::int64_t g_arc_to_tick_offset_ms = 0;
 bool g_arc_clock_calibrated = false;
 
@@ -54,7 +54,7 @@ std::uint64_t EventTickMs(const ArcCbtEvent* ev, std::uint64_t received_at_ms,
 
     // Fallback until a local callback provides a clock calibration. This
     // estimate affects the countdown only; it cannot make the delayed event
-    // arrive earlier. The documented area-feed latency is roughly 2-3 sec.
+    // arrive earlier. The observed area-feed latency is roughly 1.1 sec.
     return received_at_ms > kAreaCallbackDelayEstimateMs
         ? received_at_ms - kAreaCallbackDelayEstimateMs : 0;
 }
@@ -207,7 +207,7 @@ void OnCombatEvent(ArcCbtEvent* ev, ArcAgent* src, ArcAgent* dst,
 
     // Start a single 40-second Well of Corruption timer from the Arc combat
     // event timestamp. EventTickMs maps Arc's combat clock to GetTickCount64,
-    // compensating for the ~2.6s delayed area callback. Ignore further casts
+    // compensating for the ~1.1s delayed area callback. Ignore further casts
     // while the current timer is still running.
     if (ev->skillid == kWellOfCorruptionSkillId && ev->is_statechange == 0 &&
         ev->buff == 0 && IsLocalSource(ev, src) && dst != nullptr && !IsSelf(dst)) {

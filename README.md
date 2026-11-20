@@ -165,3 +165,14 @@ mapping (including the 2.6-second fallback delay estimate) so callback latency
 is accounted for. Additional matching events do not restart an active countdown.
 The window can be hidden in Nexus > BoonPanel > Configure. The timer resets on
 map change or ArcDPS module reload.
+
+
+## Well of Corruption timer window appearance
+
+The timer window now has independent appearance controls in Nexus > BoonPanel > Configure:
+- Hide timer window background
+- Hide timer window title bar
+- Timer window font size (8–36 px)
+- Timer window font color (including alpha)
+
+These settings are stored in BoonPanel.ini and persist across game restarts.
