@@ -161,7 +161,7 @@ PNGs and resource definitions are in `resources/`.
 BoonPanel includes a separate **Well of Corruption** countdown window. It listens
 for the local player's ArcDPS strike-damage event with skill ID `10545`, starts a
 40-second timer from the event timestamp, and uses the existing ArcDPS clock
-mapping (including the 2.6-second fallback delay estimate) so callback latency
+mapping (including the 0.1-second fallback delay estimate) so callback latency
 is accounted for. Additional matching events do not restart an active countdown.
 The window can be hidden in Nexus > BoonPanel > Configure. The timer resets on
 map change or ArcDPS module reload.
